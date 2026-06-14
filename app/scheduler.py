@@ -35,9 +35,14 @@ async def restore_jobs():
         logger.info(f"Restored {len(tasks)} active jobs")
 
 
-def schedule_task(task: Task):
+def schedule_task(task: Task, run_immediately: bool = False):
     job_id = f"task_{task.id}"
-    next_run = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
+    if run_immediately:
+        next_run = datetime.datetime.utcnow() + datetime.timedelta(seconds=2)
+    elif task.next_run_at and task.next_run_at > datetime.datetime.utcnow():
+        next_run = task.next_run_at
+    else:
+        next_run = datetime.datetime.utcnow() + datetime.timedelta(seconds=task.interval_seconds)
     scheduler.add_job(
         run_task,
         trigger=IntervalTrigger(seconds=task.interval_seconds),
@@ -46,7 +51,7 @@ def schedule_task(task: Task):
         args=[task.id],
         next_run_time=next_run,
     )
-    logger.info(f"Scheduled task {task.id} every {task.interval_seconds}s")
+    logger.info(f"Scheduled task {task.id} every {task.interval_seconds}s, next: {next_run.isoformat()}")
 
 
 def reschedule_with_backoff(task_id: int, backoff_seconds: int):
@@ -131,6 +136,7 @@ async def _execute_task(task_id: int):
                     )
                     prev_snapshot = prev_result.scalar_one_or_none()
                     old_text = prev_snapshot.extracted_text if prev_snapshot else ""
+                    old_html = prev_snapshot.raw_html if prev_snapshot else ""
 
                     snapshot = Snapshot(
                         task_id=task.id,
@@ -141,9 +147,10 @@ async def _execute_task(task_id: int):
                         screenshot_path=screenshot_path,
                     )
                     session.add(snapshot)
+                    await session.flush()
 
                     should_notify = await evaluate_rules(
-                        task.id, old_text, extracted_text, normalized_html, session
+                        task.id, old_text, extracted_text, normalized_html, session, old_html=old_html
                     )
 
                     event = EventLog(
@@ -152,6 +159,7 @@ async def _execute_task(task_id: int):
                         payload={
                             "old_hash": task.last_hash,
                             "new_hash": content_hash,
+                            "snapshot_id": snapshot.id,
                             "resource_meta": resource_meta,
                         },
                         notified=should_notify,

@@ -15,7 +15,7 @@ router = APIRouter(tags=["tasks"])
 async def create_task(body: TaskCreate, user: str = Depends(require_auth)):
     async with async_session() as session:
         task = Task(**body.model_dump())
-        task.next_run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
+        task.next_run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=task.interval_seconds)
         session.add(task)
         await session.commit()
         await session.refresh(task)
@@ -84,6 +84,7 @@ async def delete_task(task_id: int, user: str = Depends(require_auth)):
 async def batch_pause(task_ids: list[int], user: str = Depends(require_auth)):
     async with async_session() as session:
         await session.execute(update(Task).where(Task.id.in_(task_ids)).values(status="paused"))
+        session.add(AuditLog(user=user, action="task.batch_pause", resource_type="task", new_value={"task_ids": task_ids}))
         await session.commit()
     for tid in task_ids:
         unschedule_task(tid)
@@ -94,6 +95,7 @@ async def batch_pause(task_ids: list[int], user: str = Depends(require_auth)):
 async def batch_resume(task_ids: list[int], user: str = Depends(require_auth)):
     async with async_session() as session:
         await session.execute(update(Task).where(Task.id.in_(task_ids)).values(status="active", retry_count=0, last_error=""))
+        session.add(AuditLog(user=user, action="task.batch_resume", resource_type="task", new_value={"task_ids": task_ids}))
         await session.commit()
         result = await session.execute(select(Task).where(Task.id.in_(task_ids)))
         for task in result.scalars():
@@ -108,6 +110,7 @@ async def batch_delete(task_ids: list[int], user: str = Depends(require_auth)):
         for task in result.scalars():
             unschedule_task(task.id)
             await session.delete(task)
+        session.add(AuditLog(user=user, action="task.batch_delete", resource_type="task", new_value={"task_ids": task_ids}))
         await session.commit()
     return {"ok": True}
 
@@ -119,6 +122,11 @@ async def trigger_task(task_id: int, user: str = Depends(require_auth)):
         if not task:
             raise HTTPException(404)
     await run_task(task_id)
+    async with async_session() as session:
+        task = await session.get(Task, task_id)
+        if task and task.status == "active":
+            task.next_run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=task.interval_seconds)
+            await session.commit()
     return {"ok": True}
 
 
@@ -159,6 +167,8 @@ async def create_rule(task_id: int, body: RuleCreate, user: str = Depends(requir
         session.add(rule)
         await session.commit()
         await session.refresh(rule)
+        session.add(AuditLog(user=user, action="rule.create", resource_type="rule", resource_id=rule.id, new_value={"task_id": task_id, **body.model_dump()}))
+        await session.commit()
         return rule
 
 
@@ -168,11 +178,14 @@ async def update_rule(rule_id: int, body: RuleUpdate, user: str = Depends(requir
         rule = await session.get(MonitoringRule, rule_id)
         if not rule:
             raise HTTPException(404)
+        old_data = {"rule_type": rule.rule_type, "config": rule.config, "logic_group": rule.logic_group}
         data = body.model_dump(exclude_unset=True)
         for k, v in data.items():
             setattr(rule, k, v)
         await session.commit()
         await session.refresh(rule)
+        session.add(AuditLog(user=user, action="rule.update", resource_type="rule", resource_id=rule_id, old_value=old_data, new_value=data))
+        await session.commit()
         return rule
 
 
@@ -183,5 +196,6 @@ async def delete_rule(rule_id: int, user: str = Depends(require_auth)):
         if not rule:
             raise HTTPException(404)
         await session.delete(rule)
+        session.add(AuditLog(user=user, action="rule.delete", resource_type="rule", resource_id=rule_id))
         await session.commit()
         return {"ok": True}

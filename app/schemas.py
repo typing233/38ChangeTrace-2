@@ -195,7 +195,7 @@ class RuleCreate(BaseModel):
     @field_validator("rule_type")
     @classmethod
     def rule_type_valid(cls, v):
-        allowed = ("xpath", "keyword_include", "keyword_exclude", "regex")
+        allowed = ("xpath", "css", "keyword_include", "keyword_exclude", "regex")
         if v not in allowed:
             raise ValueError(f"规则类型必须是: {', '.join(allowed)}")
         return v

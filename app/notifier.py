@@ -22,6 +22,7 @@ DEFAULT_TEMPLATE = """【ChangeTrace 变更通知】
 网址: {{ task_url }}
 时间: {{ timestamp }}
 变化摘要: {{ change_summary }}
+差异查看: {{ diff_link }}
 """
 
 
@@ -100,30 +101,39 @@ class NotificationDispatcher:
             )
             bindings = result.all()
 
+            any_sent = False
             for binding, channel in bindings:
-                await self._deliver(event, task, binding, channel, session)
+                sent = await self._deliver(event, task, binding, channel, session)
+                if sent:
+                    any_sent = True
+
+            if any_sent:
+                db_event = await session.get(EventLog, event.id)
+                if db_event:
+                    db_event.delivered = True
+                    await session.commit()
 
     async def _deliver(
         self, event: EventLog, task: Task,
         binding: TaskChannelBinding, channel: NotificationChannel,
         session: AsyncSession
-    ):
+    ) -> bool:
         if await self._is_duplicate(event.id, channel.id, session):
             await self._log_delivery(
                 task.id, channel.id, event.id, "skipped_dedup", 1, "", 0, "", 0, "", session
             )
-            return
+            return False
 
         if await self._is_rate_limited(channel.id, channel.rate_limit_per_minute, session):
             await self._log_delivery(
                 task.id, channel.id, event.id, "skipped_rate_limit", 1, "", 0, "", 0, "", session
             )
-            return
+            return False
 
         handler = self._handlers.get(channel.channel_type)
         if not handler:
             logger.warning(f"No handler for channel type: {channel.channel_type}")
-            return
+            return False
 
         template_str = binding.template or DEFAULT_TEMPLATE
         rendered = self._render_template(template_str, task, event)
@@ -138,35 +148,34 @@ class NotificationDispatcher:
                     rendered[:2000], result.get("status_code", 200),
                     result.get("response", "")[:500], latency, "", session
                 )
-                event.delivered = True
-                await session.commit()
-                return
+                return True
             except Exception as e:
                 latency = int((time.time() - t0) * 1000)
-                if attempt == settings.NOTIFICATION_RETRY_MAX:
-                    await self._log_delivery(
-                        task.id, channel.id, event.id, "failed", attempt,
-                        rendered[:2000], 0, "", latency, str(e)[:500], session
-                    )
-                else:
-                    await self._log_delivery(
-                        task.id, channel.id, event.id, "failed", attempt,
-                        rendered[:2000], 0, "", latency, str(e)[:500], session
-                    )
+                await self._log_delivery(
+                    task.id, channel.id, event.id, "failed", attempt,
+                    rendered[:2000], 0, "", latency, str(e)[:500], session
+                )
+                if attempt < settings.NOTIFICATION_RETRY_MAX:
                     await asyncio.sleep(min(2 ** attempt * 5, 60))
+
+        return False
 
     def _render_template(self, template_str: str, task: Task, event: EventLog) -> str:
         try:
             tmpl = Template(template_str)
             payload = event.payload or {}
+            snapshot_id = payload.get("snapshot_id", "")
+            diff_link = f"/api/snapshots/{snapshot_id}/diff" if snapshot_id else ""
             return tmpl.render(
                 task_name=task.name,
                 task_url=task.url,
+                task_id=task.id,
                 timestamp=datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
                 change_summary=f"内容哈希变更: {payload.get('old_hash', '')[:8]}→{payload.get('new_hash', '')[:8]}",
                 old_hash=payload.get("old_hash", ""),
                 new_hash=payload.get("new_hash", ""),
                 event_type=event.event_type,
+                diff_link=diff_link,
             )
         except Exception as e:
             logger.error(f"Template render error: {e}")

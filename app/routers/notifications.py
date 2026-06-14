@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.auth import require_auth
 from app.database import async_session
-from app.models import NotificationChannel, TaskChannelBinding, DeliveryLog
+from app.models import NotificationChannel, TaskChannelBinding, DeliveryLog, AuditLog
 from app.schemas import ChannelCreate, ChannelUpdate, ChannelOut, BindingCreate, BindingOut, DeliveryLogOut
 
 router = APIRouter(tags=["notifications"])
@@ -17,6 +17,8 @@ async def create_channel(body: ChannelCreate, user: str = Depends(require_auth))
         session.add(ch)
         await session.commit()
         await session.refresh(ch)
+        session.add(AuditLog(user=user, action="channel.create", resource_type="channel", resource_id=ch.id, new_value=body.model_dump()))
+        await session.commit()
         return ch
 
 
@@ -33,12 +35,15 @@ async def update_channel(channel_id: int, body: ChannelUpdate, user: str = Depen
         ch = await session.get(NotificationChannel, channel_id)
         if not ch:
             raise HTTPException(404)
+        old_data = {"name": ch.name, "config": ch.config}
         data = body.model_dump(exclude_unset=True)
         for k, v in data.items():
             setattr(ch, k, v)
         ch.updated_at = datetime.datetime.utcnow()
         await session.commit()
         await session.refresh(ch)
+        session.add(AuditLog(user=user, action="channel.update", resource_type="channel", resource_id=channel_id, old_value=old_data, new_value=data))
+        await session.commit()
         return ch
 
 
@@ -49,6 +54,7 @@ async def delete_channel(channel_id: int, user: str = Depends(require_auth)):
         if not ch:
             raise HTTPException(404)
         await session.delete(ch)
+        session.add(AuditLog(user=user, action="channel.delete", resource_type="channel", resource_id=channel_id))
         await session.commit()
         return {"ok": True}
 
@@ -94,6 +100,8 @@ async def bind_channel(task_id: int, body: BindingCreate, user: str = Depends(re
         session.add(binding)
         await session.commit()
         await session.refresh(binding)
+        session.add(AuditLog(user=user, action="binding.create", resource_type="binding", resource_id=binding.id, new_value={"task_id": task_id, "channel_id": body.channel_id}))
+        await session.commit()
         return binding
 
 
@@ -110,6 +118,7 @@ async def unbind_channel(task_id: int, channel_id: int, user: str = Depends(requ
         if not binding:
             raise HTTPException(404)
         await session.delete(binding)
+        session.add(AuditLog(user=user, action="binding.delete", resource_type="binding", new_value={"task_id": task_id, "channel_id": channel_id}))
         await session.commit()
         return {"ok": True}
 

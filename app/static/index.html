@@ -534,6 +534,7 @@ createApp({
       try{payload.headers=JSON.parse(payload.headers_raw);}catch{payload.headers={};}
       try{payload.cookies=JSON.parse(payload.cookies_raw);}catch{payload.cookies={};}
       delete payload.headers_raw;delete payload.cookies_raw;
+      if(!editId.value)delete payload.version;
       const method=editId.value?'PUT':'POST';
       const url=editId.value?`/tasks/${editId.value}`:'/tasks';
       const r=await api(url,{method,body:payload});
@@ -552,11 +553,11 @@ createApp({
       }finally{previewing.value=false;}
     }
 
-    function editTask(t){editId.value=t.id;form.value={name:t.name,url:t.url,interval_seconds:t.interval_seconds,render_mode:t.render_mode,proxy:t.proxy||'',timeout_seconds:t.timeout_seconds,headers_raw:JSON.stringify(t.headers||{}),cookies_raw:JSON.stringify(t.cookies||{}),include_selector:t.include_selector||'',exclude_selector:t.exclude_selector||''};tab.value='create';}
+    function editTask(t){editId.value=t.id;form.value={name:t.name,url:t.url,interval_seconds:t.interval_seconds,render_mode:t.render_mode,proxy:t.proxy||'',timeout_seconds:t.timeout_seconds,headers_raw:JSON.stringify(t.headers||{}),cookies_raw:JSON.stringify(t.cookies||{}),include_selector:t.include_selector||'',exclude_selector:t.exclude_selector||'',version:t.version};tab.value='create';}
     async function deleteTask(id){if(!confirm('确认删除?'))return;await api(`/tasks/${id}`,{method:'DELETE'});await loadTasks();}
     async function triggerTask(id){await api(`/tasks/${id}/trigger`,{method:'POST'});showToast('已触发');await loadTasks();}
-    async function pauseTask(id){await api(`/tasks/${id}`,{method:'PUT',body:{status:'paused'}});await loadTasks();}
-    async function resumeTask(id){await api(`/tasks/${id}`,{method:'PUT',body:{status:'active'}});await loadTasks();}
+    async function pauseTask(id){const t=tasks.value.find(x=>x.id===id);await api(`/tasks/${id}`,{method:'PUT',body:{status:'paused',version:t?t.version:undefined}});await loadTasks();}
+    async function resumeTask(id){const t=tasks.value.find(x=>x.id===id);await api(`/tasks/${id}`,{method:'PUT',body:{status:'active',version:t?t.version:undefined}});await loadTasks();}
     async function batchPause(){await api('/tasks/batch/pause',{method:'POST',body:selected.value});selected.value=[];await loadTasks();}
     async function batchResume(){await api('/tasks/batch/resume',{method:'POST',body:selected.value});selected.value=[];await loadTasks();}
     async function batchDelete(){if(!confirm('确认批量删除?'))return;await api('/tasks/batch/delete',{method:'POST',body:selected.value});selected.value=[];await loadTasks();}
