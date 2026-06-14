@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
@@ -11,10 +12,11 @@ from app.models import Task, Snapshot, EventLog
 from app.schemas import TaskCreate, TaskUpdate, TaskOut, SnapshotOut, DiffResult
 from app.scheduler import (
     async_session, init_db, restore_jobs, scheduler,
-    schedule_task, unschedule_task, run_task,
+    schedule_task, unschedule_task, run_task, DATA_DIR, SCREENSHOTS_DIR,
 )
-from app.fetcher import fetch_static, fetch_js, normalize_and_extract
+from app.fetcher import normalize_and_extract
 from app.differ import compute_diff
+from app.notifier import event_queue
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,10 +24,12 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await event_queue.start()
     scheduler.start()
     await restore_jobs()
     yield
     scheduler.shutdown(wait=False)
+    await event_queue.stop()
 
 
 app = FastAPI(title="ChangeTrace", lifespan=lifespan)
@@ -35,6 +39,14 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 @app.get("/")
 async def index():
     return FileResponse("app/static/index.html")
+
+
+@app.get("/screenshots/{filename}")
+async def serve_screenshot(filename: str):
+    path = os.path.join(SCREENSHOTS_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Screenshot not found")
+    return FileResponse(path, media_type="image/png")
 
 
 # --- Task CRUD ---
@@ -155,7 +167,7 @@ async def list_snapshots(task_id: int, limit: int = Query(20, le=100)):
         return result.scalars().all()
 
 
-@app.get("/api/snapshots/{snapshot_id}/diff", response_model=DiffResult)
+@app.get("/api/snapshots/{snapshot_id}/diff")
 async def get_diff(snapshot_id: int):
     async with async_session() as session:
         snapshot = await session.get(Snapshot, snapshot_id)
@@ -170,17 +182,33 @@ async def get_diff(snapshot_id: int):
         prev_snapshot = prev.scalar_one_or_none()
         old_text = prev_snapshot.extracted_text if prev_snapshot else ""
         diff = compute_diff(old_text, snapshot.extracted_text)
-        return DiffResult(
-            old_snapshot_id=prev_snapshot.id if prev_snapshot else None,
-            new_snapshot_id=snapshot.id,
+
+        old_screenshot = ""
+        new_screenshot = ""
+        if prev_snapshot and prev_snapshot.screenshot_path:
+            fname = os.path.basename(prev_snapshot.screenshot_path)
+            old_screenshot = f"/screenshots/{fname}"
+        if snapshot.screenshot_path:
+            fname = os.path.basename(snapshot.screenshot_path)
+            new_screenshot = f"/screenshots/{fname}"
+
+        return {
+            "old_snapshot_id": prev_snapshot.id if prev_snapshot else None,
+            "new_snapshot_id": snapshot.id,
+            "old_screenshot": old_screenshot,
+            "new_screenshot": new_screenshot,
+            "old_resource_meta": prev_snapshot.resource_meta if prev_snapshot else None,
+            "new_resource_meta": snapshot.resource_meta,
             **diff,
-        )
+        }
 
 
 # --- Preview (live CSS selector test) ---
 
 @app.post("/api/preview")
 async def preview_content(body: dict):
+    from app.fetcher import fetch_static, fetch_js
+
     url = body.get("url", "")
     include_selector = body.get("include_selector", "")
     exclude_selector = body.get("exclude_selector", "")
@@ -193,9 +221,9 @@ async def preview_content(body: dict):
         raise HTTPException(400, "url required")
     try:
         if render_mode == "js":
-            html = await fetch_js(url, headers, cookies, proxy, 15)
+            html, _ = await fetch_js(url, headers, cookies, proxy, 15)
         else:
-            html = await fetch_static(url, headers, cookies, proxy, 15)
+            html, _ = await fetch_static(url, headers, cookies, proxy, 15)
         _, text = normalize_and_extract(html, include_selector, exclude_selector)
         return {"text": text[:5000]}
     except Exception as e:
@@ -212,3 +240,8 @@ async def list_events(task_id: int, limit: int = Query(50, le=200)):
         )
         events = result.scalars().all()
         return [{"id": e.id, "event_type": e.event_type, "payload": e.payload, "created_at": e.created_at.isoformat()} for e in events]
+
+
+@app.get("/api/queue/status")
+async def queue_status():
+    return {"pending_events": event_queue.qsize}

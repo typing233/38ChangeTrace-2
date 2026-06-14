@@ -2,18 +2,17 @@ import asyncio
 import datetime
 import logging
 import os
-from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.executors.asyncio import AsyncIOExecutor
+from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from app.models import Base, Task, Snapshot, EventLog
 from app.fetcher import fetch_static, fetch_js, normalize_and_extract, compute_hash
-from app.differ import compute_diff
-from app.notifier import dispatcher
+from app.notifier import event_queue
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +28,8 @@ _semaphore = asyncio.Semaphore(5)
 _running_tasks: set[int] = set()
 
 scheduler = AsyncIOScheduler(
-    jobstores={"default": SQLAlchemyJobStore(url=f"sqlite:///{DB_PATH}")},
-    executors={"default": ThreadPoolExecutor(10)},
-    job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 60},
+    executors={"default": AsyncIOExecutor()},
+    job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 120},
 )
 
 
@@ -48,25 +46,52 @@ async def restore_jobs():
         tasks = result.scalars().all()
         for task in tasks:
             schedule_task(task)
+        logger.info(f"Restored {len(tasks)} active jobs")
 
 
 def schedule_task(task: Task):
     job_id = f"task_{task.id}"
+    next_run = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
     scheduler.add_job(
         run_task,
-        "interval",
-        seconds=task.interval_seconds,
+        trigger=IntervalTrigger(seconds=task.interval_seconds),
         id=job_id,
         replace_existing=True,
         args=[task.id],
-        next_run_time=datetime.datetime.utcnow() + datetime.timedelta(seconds=5),
+        next_run_time=next_run,
     )
+    logger.info(f"Scheduled task {task.id} every {task.interval_seconds}s, next run: {next_run}")
+
+
+def reschedule_with_backoff(task_id: int, backoff_seconds: int):
+    """Reschedule a failed task to retry after backoff_seconds."""
+    job_id = f"task_{task_id}"
+    next_run = datetime.datetime.utcnow() + datetime.timedelta(seconds=backoff_seconds)
+    try:
+        job = scheduler.get_job(job_id)
+        if job:
+            job.modify(next_run_time=next_run)
+            logger.info(f"Task {task_id} rescheduled with {backoff_seconds}s backoff, next run: {next_run}")
+        else:
+            scheduler.add_job(
+                run_task,
+                trigger=DateTrigger(run_date=next_run),
+                id=f"{job_id}_retry",
+                replace_existing=True,
+                args=[task_id],
+            )
+    except Exception as e:
+        logger.error(f"Failed to reschedule task {task_id}: {e}")
 
 
 def unschedule_task(task_id: int):
     job_id = f"task_{task_id}"
     try:
         scheduler.remove_job(job_id)
+    except Exception:
+        pass
+    try:
+        scheduler.remove_job(f"{job_id}_retry")
     except Exception:
         pass
 
@@ -91,12 +116,23 @@ async def _execute_task(task_id: int):
             try:
                 screenshot_path = ""
                 if task.render_mode == "js":
-                    screenshot_path = os.path.join(SCREENSHOTS_DIR, f"task_{task.id}_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}.png")
-                    html = await fetch_js(task.url, task.headers or {}, task.cookies or {}, task.proxy, task.timeout_seconds, screenshot_path)
+                    screenshot_path = os.path.join(
+                        SCREENSHOTS_DIR,
+                        f"task_{task.id}_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}.png"
+                    )
+                    html, resource_meta = await fetch_js(
+                        task.url, task.headers or {}, task.cookies or {},
+                        task.proxy, task.timeout_seconds, screenshot_path
+                    )
                 else:
-                    html = await fetch_static(task.url, task.headers or {}, task.cookies or {}, task.proxy, task.timeout_seconds)
+                    html, resource_meta = await fetch_static(
+                        task.url, task.headers or {}, task.cookies or {},
+                        task.proxy, task.timeout_seconds
+                    )
 
-                normalized_html, extracted_text = normalize_and_extract(html, task.include_selector, task.exclude_selector)
+                normalized_html, extracted_text = normalize_and_extract(
+                    html, task.include_selector, task.exclude_selector
+                )
                 content_hash = compute_hash(extracted_text)
 
                 if content_hash != task.last_hash:
@@ -105,7 +141,7 @@ async def _execute_task(task_id: int):
                         content_hash=content_hash,
                         raw_html=normalized_html,
                         extracted_text=extracted_text,
-                        resource_meta={"url": task.url, "render_mode": task.render_mode},
+                        resource_meta=resource_meta,
                         screenshot_path=screenshot_path,
                     )
                     session.add(snapshot)
@@ -113,18 +149,26 @@ async def _execute_task(task_id: int):
                     event = EventLog(
                         task_id=task.id,
                         event_type="change_detected",
-                        payload={"old_hash": task.last_hash, "new_hash": content_hash},
+                        payload={
+                            "old_hash": task.last_hash,
+                            "new_hash": content_hash,
+                            "resource_meta": resource_meta,
+                        },
                     )
                     session.add(event)
-
                     task.last_hash = content_hash
-                    await dispatcher.dispatch(event)
+                    await session.commit()
+                    await event_queue.put(event)
+                else:
+                    pass
 
-                task.last_run_at = datetime.datetime.utcnow()
-                task.next_run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=task.interval_seconds)
+                now = datetime.datetime.utcnow()
+                task.last_run_at = now
+                task.next_run_at = now + datetime.timedelta(seconds=task.interval_seconds)
                 task.retry_count = 0
                 task.last_error = ""
                 await session.commit()
+                logger.info(f"Task {task.id} completed, hash={'changed' if content_hash != task.last_hash else 'same'}")
 
             except Exception as e:
                 task.retry_count += 1
@@ -134,11 +178,18 @@ async def _execute_task(task_id: int):
                 if task.retry_count >= task.max_retries:
                     task.status = "error"
                     unschedule_task(task.id)
+                    task.next_run_at = None
                 else:
-                    backoff = min(2 ** task.retry_count * task.interval_seconds, 3600)
+                    backoff = min(2 ** task.retry_count * 30, 3600)
                     task.next_run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=backoff)
+                    reschedule_with_backoff(task.id, backoff)
 
-                event = EventLog(task_id=task.id, event_type="error", payload={"error": str(e), "retry": task.retry_count})
+                event = EventLog(
+                    task_id=task.id,
+                    event_type="error",
+                    payload={"error": str(e), "retry_count": task.retry_count, "max_retries": task.max_retries},
+                )
                 session.add(event)
                 await session.commit()
-                logger.error(f"Task {task.id} failed: {e}")
+                await event_queue.put(event)
+                logger.error(f"Task {task.id} failed (attempt {task.retry_count}/{task.max_retries}): {e}")

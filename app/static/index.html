@@ -36,18 +36,28 @@ textarea { resize: vertical; min-height: 60px; font-family: monospace; }
 .status-error { background: #f8d7da; color: #721c24; }
 .actions { display: flex; gap: 4px; flex-wrap: wrap; }
 .preview-box { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 12px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-.diff-view { font-family: monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.6; }
+.diff-view { font-family: monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.6; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 8px; }
 .diff-add { background: #d4edda; color: #155724; }
 .diff-del { background: #f8d7da; color: #721c24; }
 .diff-header { color: #6c757d; }
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: #fff; border-radius: 8px; padding: 24px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; }
+.modal { background: #fff; border-radius: 8px; padding: 24px; width: 95%; max-width: 1000px; max-height: 90vh; overflow-y: auto; }
 .modal h2 { margin-bottom: 16px; }
 .snapshot-list { list-style: none; }
 .snapshot-list li { padding: 8px 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
 .batch-bar { display: flex; gap: 8px; align-items: center; padding: 10px; background: #e8f4fd; border-radius: 4px; margin-bottom: 12px; }
 .checkbox { width: 16px; height: 16px; }
 .error-text { color: #dc3545; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.screenshot-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.screenshot-compare .side { text-align: center; }
+.screenshot-compare .side img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
+.screenshot-compare .side h4 { margin-bottom: 8px; font-size: 13px; color: #555; }
+.meta-section { margin-top: 12px; background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 12px; font-size: 12px; }
+.meta-section h4 { margin-bottom: 8px; font-size: 13px; }
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.meta-item { display: flex; gap: 4px; }
+.meta-item .key { font-weight: 600; color: #555; }
+.meta-item .val { color: #333; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -135,10 +145,56 @@ textarea { resize: vertical; min-height: 60px; font-family: monospace; }
         </li>
         <li v-if="!snapshots.length" style="color:#999">暂无快照</li>
       </ul>
+
+      <!-- Diff Section -->
       <div v-if="diffData" style="margin-top:16px">
-        <h3>差异对比</h3>
+        <h3>文本差异</h3>
         <div class="diff-view">
           <div v-for="line in diffLines" :class="line.cls">{{ line.text }}</div>
+        </div>
+
+        <!-- Screenshot Comparison -->
+        <div v-if="diffData.old_screenshot || diffData.new_screenshot" style="margin-top:16px">
+          <h3>截图对比</h3>
+          <div class="screenshot-compare">
+            <div class="side">
+              <h4>前一版本</h4>
+              <img v-if="diffData.old_screenshot" :src="diffData.old_screenshot" alt="旧截图">
+              <div v-else style="color:#999;padding:40px">无截图</div>
+            </div>
+            <div class="side">
+              <h4>当前版本</h4>
+              <img v-if="diffData.new_screenshot" :src="diffData.new_screenshot" alt="新截图">
+              <div v-else style="color:#999;padding:40px">无截图</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resource Metadata -->
+        <div v-if="diffData.new_resource_meta" class="meta-section">
+          <h4>资源元数据</h4>
+          <div class="meta-grid">
+            <div class="meta-item"><span class="key">URL:</span><span class="val">{{ diffData.new_resource_meta.url }}</span></div>
+            <div class="meta-item"><span class="key">状态码:</span><span class="val">{{ diffData.new_resource_meta.status_code }}</span></div>
+            <div class="meta-item"><span class="key">Content-Type:</span><span class="val">{{ diffData.new_resource_meta.content_type }}</span></div>
+            <div class="meta-item"><span class="key">渲染方式:</span><span class="val">{{ diffData.new_resource_meta.render_mode }}</span></div>
+            <div class="meta-item"><span class="key">耗时:</span><span class="val">{{ diffData.new_resource_meta.elapsed_ms }}ms</span></div>
+            <div class="meta-item" v-if="diffData.new_resource_meta.page_title"><span class="key">页面标题:</span><span class="val">{{ diffData.new_resource_meta.page_title }}</span></div>
+            <div class="meta-item" v-if="diffData.new_resource_meta.content_length"><span class="key">内容大小:</span><span class="val">{{ formatBytes(diffData.new_resource_meta.content_length) }}</span></div>
+            <div class="meta-item" v-if="diffData.new_resource_meta.network_requests"><span class="key">网络请求数:</span><span class="val">{{ diffData.new_resource_meta.network_requests }}</span></div>
+          </div>
+          <div v-if="diffData.new_resource_meta.resources" style="margin-top:8px">
+            <template v-if="diffData.new_resource_meta.resources.script_count != null">
+              <span style="margin-right:12px"><b>脚本:</b> {{ diffData.new_resource_meta.resources.script_count }}</span>
+              <span style="margin-right:12px"><b>样式表:</b> {{ diffData.new_resource_meta.resources.stylesheet_count }}</span>
+              <span style="margin-right:12px"><b>图片:</b> {{ diffData.new_resource_meta.resources.image_count }}</span>
+              <span><b>链接:</b> {{ diffData.new_resource_meta.resources.link_count }}</span>
+            </template>
+            <template v-if="diffData.new_resource_meta.resources.total_requests != null">
+              <span style="margin-right:12px"><b>总请求:</b> {{ diffData.new_resource_meta.resources.total_requests }}</span>
+              <span><b>总大小:</b> {{ formatBytes(diffData.new_resource_meta.resources.total_size_bytes) }}</span>
+            </template>
+          </div>
         </div>
       </div>
     </div>
@@ -170,6 +226,14 @@ createApp({
     }
 
     function fmtTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN'); }
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let i = 0;
+      while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+      return bytes.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+    }
 
     async function saveTask() {
       const payload = { ...form.value };
@@ -231,7 +295,7 @@ createApp({
     }
 
     onMounted(loadTasks);
-    return { tab, tasks, selected, editId, form, previewText, previewing, historyModal, snapshots, diffData, diffLines, defaultForm, resetForm, loadTasks, fmtTime, saveTask, doPreview, editTask, deleteTask, triggerTask, pauseTask, resumeTask, batchPause, batchResume, batchDelete, toggleAll, showHistory, showDiff };
+    return { tab, tasks, selected, editId, form, previewText, previewing, historyModal, snapshots, diffData, diffLines, defaultForm, resetForm, loadTasks, fmtTime, formatBytes, saveTask, doPreview, editTask, deleteTask, triggerTask, pauseTask, resumeTask, batchPause, batchResume, batchDelete, toggleAll, showHistory, showDiff };
   }
 }).mount('#app');
 </script>
