@@ -8,36 +8,22 @@ from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Base, Task, Snapshot, EventLog
+from app.config import settings
+from app.database import async_session
+from app.models import Task, Snapshot, EventLog
 from app.fetcher import fetch_static, fetch_js, normalize_and_extract, compute_hash
-from app.notifier import event_queue
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = os.environ.get("DATA_DIR", "./data")
-DB_PATH = os.path.join(DATA_DIR, "changetrace.db")
-DB_URL = f"sqlite+aiosqlite:///{DB_PATH}"
-SCREENSHOTS_DIR = os.path.join(DATA_DIR, "screenshots")
-
-engine = create_async_engine(DB_URL, echo=False)
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-_semaphore = asyncio.Semaphore(5)
+_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_TASKS)
 _running_tasks: set[int] = set()
 
 scheduler = AsyncIOScheduler(
     executors={"default": AsyncIOExecutor()},
     job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 120},
 )
-
-
-async def init_db():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 
 async def restore_jobs():
@@ -60,18 +46,16 @@ def schedule_task(task: Task):
         args=[task.id],
         next_run_time=next_run,
     )
-    logger.info(f"Scheduled task {task.id} every {task.interval_seconds}s, next run: {next_run}")
+    logger.info(f"Scheduled task {task.id} every {task.interval_seconds}s")
 
 
 def reschedule_with_backoff(task_id: int, backoff_seconds: int):
-    """Reschedule a failed task to retry after backoff_seconds."""
     job_id = f"task_{task_id}"
     next_run = datetime.datetime.utcnow() + datetime.timedelta(seconds=backoff_seconds)
     try:
         job = scheduler.get_job(job_id)
         if job:
             job.modify(next_run_time=next_run)
-            logger.info(f"Task {task_id} rescheduled with {backoff_seconds}s backoff, next run: {next_run}")
         else:
             scheduler.add_job(
                 run_task,
@@ -107,6 +91,9 @@ async def run_task(task_id: int):
 
 
 async def _execute_task(task_id: int):
+    from app.notifier import event_queue
+    from app.rules import evaluate_rules
+
     async with _semaphore:
         async with async_session() as session:
             task = await session.get(Task, task_id)
@@ -117,7 +104,7 @@ async def _execute_task(task_id: int):
                 screenshot_path = ""
                 if task.render_mode == "js":
                     screenshot_path = os.path.join(
-                        SCREENSHOTS_DIR,
+                        settings.SCREENSHOTS_DIR,
                         f"task_{task.id}_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}.png"
                     )
                     html, resource_meta = await fetch_js(
@@ -136,6 +123,15 @@ async def _execute_task(task_id: int):
                 content_hash = compute_hash(extracted_text)
 
                 if content_hash != task.last_hash:
+                    prev_result = await session.execute(
+                        select(Snapshot)
+                        .where(Snapshot.task_id == task.id)
+                        .order_by(Snapshot.created_at.desc())
+                        .limit(1)
+                    )
+                    prev_snapshot = prev_result.scalar_one_or_none()
+                    old_text = prev_snapshot.extracted_text if prev_snapshot else ""
+
                     snapshot = Snapshot(
                         task_id=task.id,
                         content_hash=content_hash,
@@ -146,6 +142,10 @@ async def _execute_task(task_id: int):
                     )
                     session.add(snapshot)
 
+                    should_notify = await evaluate_rules(
+                        task.id, old_text, extracted_text, normalized_html, session
+                    )
+
                     event = EventLog(
                         task_id=task.id,
                         event_type="change_detected",
@@ -154,13 +154,14 @@ async def _execute_task(task_id: int):
                             "new_hash": content_hash,
                             "resource_meta": resource_meta,
                         },
+                        notified=should_notify,
                     )
                     session.add(event)
                     task.last_hash = content_hash
                     await session.commit()
-                    await event_queue.put(event)
-                else:
-                    pass
+
+                    if should_notify:
+                        await event_queue.put(event)
 
                 now = datetime.datetime.utcnow()
                 task.last_run_at = now
@@ -168,7 +169,6 @@ async def _execute_task(task_id: int):
                 task.retry_count = 0
                 task.last_error = ""
                 await session.commit()
-                logger.info(f"Task {task.id} completed, hash={'changed' if content_hash != task.last_hash else 'same'}")
 
             except Exception as e:
                 task.retry_count += 1

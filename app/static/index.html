@@ -3,24 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChangeTrace - 网页变更监控</title>
+<title>ChangeTrace v2 - 网页变更监控</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f7fa; color: #333; }
-.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-h1 { margin-bottom: 20px; color: #1a73e8; }
-.tabs { display: flex; gap: 8px; margin-bottom: 20px; }
-.tab { padding: 8px 16px; border: none; background: #e0e0e0; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+h1 { margin-bottom: 20px; color: #1a73e8; display: flex; align-items: center; gap: 12px; }
+h1 .ver { font-size: 12px; background: #1a73e8; color: #fff; padding: 2px 8px; border-radius: 10px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.tab { padding: 8px 16px; border: none; background: #e0e0e0; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
 .tab.active { background: #1a73e8; color: #fff; }
+.tab:hover:not(.active) { background: #ccc; }
 .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 4px; }
 .form-group.full { grid-column: 1 / -1; }
 label { font-size: 12px; font-weight: 600; color: #555; }
-input, select, textarea { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+input, select, textarea { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; transition: border-color 0.2s; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #1a73e8; }
+input.error, textarea.error { border-color: #dc3545; }
+.error-msg { color: #dc3545; font-size: 11px; }
 textarea { resize: vertical; min-height: 60px; font-family: monospace; }
-.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; }
+.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: opacity 0.2s; }
+.btn:hover { opacity: 0.85; }
 .btn-primary { background: #1a73e8; color: #fff; }
 .btn-danger { background: #dc3545; color: #fff; }
 .btn-success { background: #28a745; color: #fff; }
@@ -29,25 +35,41 @@ textarea { resize: vertical; min-height: 60px; font-family: monospace; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .task-table { width: 100%; border-collapse: collapse; }
 .task-table th, .task-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
-.task-table th { background: #f8f9fa; font-weight: 600; }
+.task-table th { background: #f8f9fa; font-weight: 600; position: sticky; top: 0; }
 .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .status-active { background: #d4edda; color: #155724; }
 .status-paused { background: #fff3cd; color: #856404; }
 .status-error { background: #f8d7da; color: #721c24; }
 .actions { display: flex; gap: 4px; flex-wrap: wrap; }
-.preview-box { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 12px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-.diff-view { font-family: monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.6; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 8px; }
-.diff-add { background: #d4edda; color: #155724; }
-.diff-del { background: #f8d7da; color: #721c24; }
-.diff-header { color: #6c757d; }
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: #fff; border-radius: 8px; padding: 24px; width: 95%; max-width: 1000px; max-height: 90vh; overflow-y: auto; }
-.modal h2 { margin-bottom: 16px; }
+.modal { background: #fff; border-radius: 8px; padding: 24px; width: 95%; max-width: 1100px; max-height: 90vh; overflow-y: auto; }
+.modal h2 { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
 .snapshot-list { list-style: none; }
 .snapshot-list li { padding: 8px 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
 .batch-bar { display: flex; gap: 8px; align-items: center; padding: 10px; background: #e8f4fd; border-radius: 4px; margin-bottom: 12px; }
 .checkbox { width: 16px; height: 16px; }
 .error-text { color: #dc3545; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+.diff-stats { font-size: 12px; color: #666; margin-left: auto; }
+.diff-stats .add { color: #28a745; font-weight: 600; }
+.diff-stats .del { color: #dc3545; font-weight: 600; }
+.diff-stats .chg { color: #e67e22; font-weight: 600; }
+.diff-container { font-family: monospace; font-size: 12px; line-height: 1.6; border: 1px solid #ddd; border-radius: 4px; overflow: auto; max-height: 500px; }
+.diff-line { display: flex; min-height: 20px; }
+.diff-line:hover { background: #f0f8ff; }
+.diff-line-no { min-width: 40px; padding: 0 6px; text-align: right; color: #999; border-right: 1px solid #eee; user-select: none; font-size: 11px; }
+.diff-line-content { padding: 0 8px; white-space: pre-wrap; word-break: break-all; flex: 1; }
+.diff-line.added { background: #e6ffec; }
+.diff-line.removed { background: #ffebe9; }
+.diff-line.changed-old { background: #ffebe9; }
+.diff-line.changed-new { background: #e6ffec; }
+.diff-line.context-collapsed { background: #f6f8fa; cursor: pointer; justify-content: center; color: #666; font-style: italic; border-top: 1px solid #eee; border-bottom: 1px solid #eee; }
+.word-insert { background: #acf2bd; padding: 1px 0; }
+.word-delete { background: #fdb8c0; padding: 1px 0; text-decoration: line-through; }
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; }
+.side-by-side .side { overflow: auto; max-height: 500px; border: 1px solid #ddd; }
+.side-by-side .side:first-child { border-right: none; border-radius: 4px 0 0 4px; }
+.side-by-side .side:last-child { border-radius: 0 4px 4px 0; }
 .screenshot-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 .screenshot-compare .side { text-align: center; }
 .screenshot-compare .side img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
@@ -58,244 +80,634 @@ textarea { resize: vertical; min-height: 60px; font-family: monospace; }
 .meta-item { display: flex; gap: 4px; }
 .meta-item .key { font-weight: 600; color: #555; }
 .meta-item .val { color: #333; word-break: break-all; }
+.login-box { max-width: 360px; margin: 100px auto; }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-bar input, .filter-bar select { padding: 6px 10px; font-size: 13px; }
+.toast { position: fixed; top: 20px; right: 20px; background: #333; color: #fff; padding: 12px 20px; border-radius: 6px; z-index: 2000; animation: fadeIn 0.3s; }
+.toast.error { background: #dc3545; }
+.toast.success { background: #28a745; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+.channel-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin: 1px; background: #e3f2fd; color: #1565c0; }
+.rule-item { display: flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 4px; }
+.preview-box { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 12px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
 </style>
 </head>
 <body>
-<div id="app" class="container">
-  <h1>ChangeTrace 网页变更监控</h1>
-  <div class="tabs">
-    <button class="tab" :class="{active: tab==='list'}" @click="tab='list'">任务列表</button>
-    <button class="tab" :class="{active: tab==='create'}" @click="tab='create'; resetForm()">添加任务</button>
+<div id="app">
+  <!-- Login -->
+  <div v-if="needLogin" class="login-box">
+    <div class="card">
+      <h2 style="margin-bottom:16px;text-align:center">ChangeTrace 登录</h2>
+      <div class="form-group" style="margin-bottom:12px"><label>用户名</label><input v-model="loginForm.username" @keyup.enter="doLogin"></div>
+      <div class="form-group" style="margin-bottom:12px"><label>密码</label><input type="password" v-model="loginForm.password" @keyup.enter="doLogin"></div>
+      <button class="btn btn-primary" style="width:100%" @click="doLogin">登录</button>
+    </div>
   </div>
 
-  <!-- Create/Edit Task -->
-  <div v-if="tab==='create'" class="card">
-    <h2 style="margin-bottom:16px">{{ editId ? '编辑任务' : '添加监控任务' }}</h2>
-    <div class="form-grid">
-      <div class="form-group"><label>任务名称</label><input v-model="form.name" placeholder="我的监控"></div>
-      <div class="form-group"><label>目标网址</label><input v-model="form.url" placeholder="https://example.com"></div>
-      <div class="form-group"><label>抓取间隔(秒)</label><input type="number" v-model.number="form.interval_seconds" min="10"></div>
-      <div class="form-group"><label>渲染方式</label>
-        <select v-model="form.render_mode"><option value="static">静态(httpx)</option><option value="js">JS渲染(Playwright)</option></select>
+  <!-- Main App -->
+  <div v-else class="container">
+    <h1>ChangeTrace 网页变更监控 <span class="ver">v2.0</span></h1>
+    <div class="tabs">
+      <button class="tab" :class="{active:tab==='list'}" @click="tab='list'">任务列表</button>
+      <button class="tab" :class="{active:tab==='create'}" @click="tab='create';resetForm()">添加任务</button>
+      <button class="tab" :class="{active:tab==='channels'}" @click="tab='channels';loadChannels()">通知通道</button>
+      <button class="tab" :class="{active:tab==='events'}" @click="tab='events';loadEvents()">事件日志</button>
+      <button class="tab" :class="{active:tab==='admin'}" @click="tab='admin'">系统管理</button>
+    </div>
+
+    <!-- Toast -->
+    <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.msg }}</div>
+
+    <!-- Create/Edit Task -->
+    <div v-if="tab==='create'" class="card">
+      <h2 style="margin-bottom:16px">{{ editId ? '编辑任务' : '添加监控任务' }}</h2>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>任务名称 *</label>
+          <input v-model="form.name" :class="{error:formErrors.name}" placeholder="我的监控">
+          <span class="error-msg" v-if="formErrors.name">{{ formErrors.name }}</span>
+        </div>
+        <div class="form-group">
+          <label>目标网址 *</label>
+          <input v-model="form.url" :class="{error:formErrors.url}" placeholder="https://example.com">
+          <span class="error-msg" v-if="formErrors.url">{{ formErrors.url }}</span>
+        </div>
+        <div class="form-group">
+          <label>抓取间隔(秒)</label>
+          <input type="number" v-model.number="form.interval_seconds" :class="{error:formErrors.interval}" min="10">
+          <span class="error-msg" v-if="formErrors.interval">{{ formErrors.interval }}</span>
+        </div>
+        <div class="form-group"><label>渲染方式</label>
+          <select v-model="form.render_mode"><option value="static">静态(httpx)</option><option value="js">JS渲染(Playwright)</option></select>
+        </div>
+        <div class="form-group"><label>代理</label><input v-model="form.proxy" placeholder="http://proxy:port"></div>
+        <div class="form-group"><label>超时(秒)</label><input type="number" v-model.number="form.timeout_seconds" min="5"></div>
+        <div class="form-group full">
+          <label>请求头 (JSON)</label>
+          <textarea v-model="form.headers_raw" :class="{error:formErrors.headers}" placeholder='{"User-Agent": "..."}'></textarea>
+          <span class="error-msg" v-if="formErrors.headers">{{ formErrors.headers }}</span>
+        </div>
+        <div class="form-group full">
+          <label>Cookie (JSON)</label>
+          <textarea v-model="form.cookies_raw" :class="{error:formErrors.cookies}" placeholder='{"session": "abc123"}'></textarea>
+          <span class="error-msg" v-if="formErrors.cookies">{{ formErrors.cookies }}</span>
+        </div>
+        <div class="form-group"><label>关注区域 (CSS选择器)</label><input v-model="form.include_selector" placeholder=".content, #main"></div>
+        <div class="form-group"><label>忽略区域 (CSS选择器)</label><input v-model="form.exclude_selector" placeholder=".ads, .nav"></div>
       </div>
-      <div class="form-group"><label>代理</label><input v-model="form.proxy" placeholder="http://proxy:port"></div>
-      <div class="form-group"><label>超时(秒)</label><input type="number" v-model.number="form.timeout_seconds" min="5"></div>
-      <div class="form-group full"><label>请求头 (JSON)</label><textarea v-model="form.headers_raw" placeholder='{"User-Agent": "..."}'></textarea></div>
-      <div class="form-group full"><label>Cookie (JSON)</label><textarea v-model="form.cookies_raw" placeholder='{"session": "abc123"}'></textarea></div>
-      <div class="form-group"><label>关注区域 (CSS选择器)</label><input v-model="form.include_selector" placeholder=".content, #main"></div>
-      <div class="form-group"><label>忽略区域 (CSS选择器)</label><input v-model="form.exclude_selector" placeholder=".ads, .nav"></div>
+      <div style="margin-top:16px; display:flex; gap:8px;">
+        <button class="btn btn-primary" @click="saveTask" :disabled="!form.name||!form.url">{{ editId ? '保存修改' : '创建任务' }}</button>
+        <button class="btn btn-warning" @click="doPreview" :disabled="!form.url||previewing">{{ previewing ? '加载中...' : '实时预览' }}</button>
+        <button class="btn" v-if="editId" @click="resetForm();tab='list'">取消</button>
+      </div>
+      <div v-if="previewText" style="margin-top:12px">
+        <label>预览命中内容:</label>
+        <div class="preview-box">{{ previewText }}</div>
+      </div>
     </div>
-    <div style="margin-top:16px; display:flex; gap:8px;">
-      <button class="btn btn-primary" @click="saveTask" :disabled="!form.name||!form.url">{{ editId ? '保存修改' : '创建任务' }}</button>
-      <button class="btn btn-warning" @click="doPreview" :disabled="!form.url || previewing">{{ previewing ? '加载中...' : '实时预览' }}</button>
-    </div>
-    <div v-if="previewText" style="margin-top:12px">
-      <label>预览命中内容:</label>
-      <div class="preview-box">{{ previewText }}</div>
-    </div>
-  </div>
 
-  <!-- Task List -->
-  <div v-if="tab==='list'">
-    <div v-if="selected.length" class="batch-bar">
-      <span>已选 {{ selected.length }} 项</span>
-      <button class="btn btn-sm btn-warning" @click="batchPause">批量暂停</button>
-      <button class="btn btn-sm btn-success" @click="batchResume">批量恢复</button>
-      <button class="btn btn-sm btn-danger" @click="batchDelete">批量删除</button>
+    <!-- Task List -->
+    <div v-if="tab==='list'">
+      <div v-if="selected.length" class="batch-bar">
+        <span>已选 {{ selected.length }} 项</span>
+        <button class="btn btn-sm btn-warning" @click="batchPause">批量暂停</button>
+        <button class="btn btn-sm btn-success" @click="batchResume">批量恢复</button>
+        <button class="btn btn-sm btn-danger" @click="batchDelete">批量删除</button>
+      </div>
+      <div class="card" style="overflow-x:auto">
+        <table class="task-table">
+          <thead><tr>
+            <th><input type="checkbox" class="checkbox" @change="toggleAll" :checked="selected.length===tasks.length&&tasks.length>0"></th>
+            <th>名称</th><th>网址</th><th>间隔</th><th>状态</th><th>上次运行</th><th>下次运行</th><th>失败原因</th><th>操作</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="t in tasks" :key="t.id">
+              <td><input type="checkbox" class="checkbox" :value="t.id" v-model="selected"></td>
+              <td>{{ t.name }}</td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="t.url">{{ t.url }}</td>
+              <td>{{ t.interval_seconds }}s</td>
+              <td><span class="status" :class="'status-'+t.status">{{ t.status }}</span></td>
+              <td>{{ fmtTime(t.last_run_at) }}</td>
+              <td>{{ fmtTime(t.next_run_at) }}</td>
+              <td><span class="error-text" :title="t.last_error">{{ t.last_error || '-' }}</span></td>
+              <td class="actions">
+                <button class="btn btn-sm btn-primary" @click="triggerTask(t.id)">触发</button>
+                <button class="btn btn-sm btn-warning" v-if="t.status==='active'" @click="pauseTask(t.id)">暂停</button>
+                <button class="btn btn-sm btn-success" v-if="t.status!=='active'" @click="resumeTask(t.id)">恢复</button>
+                <button class="btn btn-sm" @click="editTask(t)">编辑</button>
+                <button class="btn btn-sm" @click="showHistory(t.id)">历史</button>
+                <button class="btn btn-sm" @click="showRules(t.id)">规则</button>
+                <button class="btn btn-sm" @click="showBindings(t.id)">通知</button>
+                <button class="btn btn-sm btn-danger" @click="deleteTask(t.id)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="!tasks.length"><td colspan="9" style="text-align:center;color:#999">暂无任务</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    <div class="card" style="overflow-x:auto">
-      <table class="task-table">
-        <thead><tr>
-          <th><input type="checkbox" class="checkbox" @change="toggleAll" :checked="selected.length===tasks.length&&tasks.length>0"></th>
-          <th>名称</th><th>网址</th><th>间隔</th><th>状态</th><th>上次运行</th><th>下次运行</th><th>失败原因</th><th>操作</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="t in tasks" :key="t.id">
-            <td><input type="checkbox" class="checkbox" :value="t.id" v-model="selected"></td>
-            <td>{{ t.name }}</td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="t.url">{{ t.url }}</td>
-            <td>{{ t.interval_seconds }}s</td>
-            <td><span class="status" :class="'status-'+t.status">{{ t.status }}</span></td>
-            <td>{{ fmtTime(t.last_run_at) }}</td>
-            <td>{{ fmtTime(t.next_run_at) }}</td>
-            <td><span class="error-text" :title="t.last_error">{{ t.last_error || '-' }}</span></td>
-            <td class="actions">
-              <button class="btn btn-sm btn-primary" @click="triggerTask(t.id)">触发</button>
-              <button class="btn btn-sm btn-warning" v-if="t.status==='active'" @click="pauseTask(t.id)">暂停</button>
-              <button class="btn btn-sm btn-success" v-if="t.status!=='active'" @click="resumeTask(t.id)">恢复</button>
-              <button class="btn btn-sm" @click="editTask(t)">编辑</button>
-              <button class="btn btn-sm" @click="showHistory(t.id)">历史</button>
-              <button class="btn btn-sm btn-danger" @click="deleteTask(t.id)">删除</button>
-            </td>
-          </tr>
-          <tr v-if="!tasks.length"><td colspan="9" style="text-align:center;color:#999">暂无任务</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
 
-  <!-- History Modal -->
-  <div v-if="historyModal" class="modal-overlay" @click.self="historyModal=false">
-    <div class="modal">
-      <h2>变更历史 <button class="btn btn-sm" @click="historyModal=false" style="float:right">关闭</button></h2>
-      <ul class="snapshot-list">
-        <li v-for="s in snapshots" :key="s.id">
-          <span>{{ fmtTime(s.created_at) }} — hash: {{ s.content_hash.slice(0,12) }}...</span>
-          <button class="btn btn-sm btn-primary" @click="showDiff(s.id)">查看差异</button>
-        </li>
-        <li v-if="!snapshots.length" style="color:#999">暂无快照</li>
-      </ul>
-
-      <!-- Diff Section -->
-      <div v-if="diffData" style="margin-top:16px">
-        <h3>文本差异</h3>
-        <div class="diff-view">
-          <div v-for="line in diffLines" :class="line.cls">{{ line.text }}</div>
-        </div>
-
-        <!-- Screenshot Comparison -->
-        <div v-if="diffData.old_screenshot || diffData.new_screenshot" style="margin-top:16px">
-          <h3>截图对比</h3>
-          <div class="screenshot-compare">
-            <div class="side">
-              <h4>前一版本</h4>
-              <img v-if="diffData.old_screenshot" :src="diffData.old_screenshot" alt="旧截图">
-              <div v-else style="color:#999;padding:40px">无截图</div>
-            </div>
-            <div class="side">
-              <h4>当前版本</h4>
-              <img v-if="diffData.new_screenshot" :src="diffData.new_screenshot" alt="新截图">
-              <div v-else style="color:#999;padding:40px">无截图</div>
-            </div>
+    <!-- Notification Channels -->
+    <div v-if="tab==='channels'">
+      <div class="card">
+        <h2 style="margin-bottom:16px">通知通道管理</h2>
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="form-group"><label>通道名称</label><input v-model="channelForm.name" placeholder="我的Webhook"></div>
+          <div class="form-group"><label>类型</label>
+            <select v-model="channelForm.channel_type">
+              <option value="webhook">Webhook</option>
+              <option value="email">邮件</option>
+              <option value="telegram">Telegram</option>
+              <option value="dingtalk">钉钉</option>
+              <option value="slack">Slack</option>
+            </select>
           </div>
+          <div class="form-group full"><label>配置 (JSON)</label>
+            <textarea v-model="channelForm.config_raw" placeholder='{"url":"https://..."}'></textarea>
+          </div>
+          <div class="form-group"><label>限流(条/分钟)</label><input type="number" v-model.number="channelForm.rate_limit_per_minute" min="1"></div>
         </div>
+        <button class="btn btn-primary" @click="saveChannel">添加通道</button>
+      </div>
+      <div class="card" v-if="channels.length">
+        <table class="task-table">
+          <thead><tr><th>名称</th><th>类型</th><th>限流</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr v-for="c in channels" :key="c.id">
+              <td>{{ c.name }}</td>
+              <td><span class="channel-badge">{{ c.channel_type }}</span></td>
+              <td>{{ c.rate_limit_per_minute }}/min</td>
+              <td><span class="status" :class="c.enabled?'status-active':'status-paused'">{{ c.enabled?'启用':'禁用' }}</span></td>
+              <td class="actions">
+                <button class="btn btn-sm btn-primary" @click="testChannel(c.id)">测试</button>
+                <button class="btn btn-sm btn-danger" @click="deleteChannel(c.id)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-        <!-- Resource Metadata -->
-        <div v-if="diffData.new_resource_meta" class="meta-section">
-          <h4>资源元数据</h4>
+    <!-- Events -->
+    <div v-if="tab==='events'">
+      <div class="card">
+        <div class="filter-bar">
+          <select v-model="eventFilter.task_id" @change="loadEvents"><option value="">全部任务</option><option v-for="t in tasks" :value="t.id">{{ t.name }}</option></select>
+          <select v-model="eventFilter.event_type" @change="loadEvents"><option value="">全部类型</option><option value="change_detected">变更</option><option value="error">错误</option><option value="manual_trigger">手动触发</option></select>
+          <input type="date" v-model="eventFilter.date_from" @change="loadEvents">
+          <input type="date" v-model="eventFilter.date_to" @change="loadEvents">
+          <input v-model="eventFilter.keyword" placeholder="关键词搜索" @keyup.enter="loadEvents" style="width:150px">
+          <button class="btn btn-sm btn-primary" @click="loadEvents">搜索</button>
+        </div>
+        <table class="task-table">
+          <thead><tr><th>时间</th><th>任务ID</th><th>类型</th><th>已通知</th><th>详情</th></tr></thead>
+          <tbody>
+            <tr v-for="e in events" :key="e.id">
+              <td>{{ fmtTime(e.created_at) }}</td>
+              <td>{{ e.task_id }}</td>
+              <td><span class="status" :class="e.event_type==='error'?'status-error':'status-active'">{{ e.event_type }}</span></td>
+              <td>{{ e.notified ? '是' : '否' }}</td>
+              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ JSON.stringify(e.payload) }}</td>
+            </tr>
+            <tr v-if="!events.length"><td colspan="5" style="text-align:center;color:#999">暂无事件</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Admin -->
+    <div v-if="tab==='admin'">
+      <div class="card">
+        <h2 style="margin-bottom:16px">系统管理</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" @click="doExport">导出配置</button>
+          <button class="btn btn-warning" @click="$refs.importFile.click()">导入配置</button>
+          <input ref="importFile" type="file" accept=".json" style="display:none" @change="doImport">
+          <button class="btn btn-success" @click="checkHealth">健康检查</button>
+        </div>
+        <div v-if="healthData" class="meta-section" style="margin-top:16px">
+          <h4>系统状态</h4>
           <div class="meta-grid">
-            <div class="meta-item"><span class="key">URL:</span><span class="val">{{ diffData.new_resource_meta.url }}</span></div>
-            <div class="meta-item"><span class="key">状态码:</span><span class="val">{{ diffData.new_resource_meta.status_code }}</span></div>
-            <div class="meta-item"><span class="key">Content-Type:</span><span class="val">{{ diffData.new_resource_meta.content_type }}</span></div>
-            <div class="meta-item"><span class="key">渲染方式:</span><span class="val">{{ diffData.new_resource_meta.render_mode }}</span></div>
-            <div class="meta-item"><span class="key">耗时:</span><span class="val">{{ diffData.new_resource_meta.elapsed_ms }}ms</span></div>
-            <div class="meta-item" v-if="diffData.new_resource_meta.page_title"><span class="key">页面标题:</span><span class="val">{{ diffData.new_resource_meta.page_title }}</span></div>
-            <div class="meta-item" v-if="diffData.new_resource_meta.content_length"><span class="key">内容大小:</span><span class="val">{{ formatBytes(diffData.new_resource_meta.content_length) }}</span></div>
-            <div class="meta-item" v-if="diffData.new_resource_meta.network_requests"><span class="key">网络请求数:</span><span class="val">{{ diffData.new_resource_meta.network_requests }}</span></div>
-          </div>
-          <div v-if="diffData.new_resource_meta.resources" style="margin-top:8px">
-            <template v-if="diffData.new_resource_meta.resources.script_count != null">
-              <span style="margin-right:12px"><b>脚本:</b> {{ diffData.new_resource_meta.resources.script_count }}</span>
-              <span style="margin-right:12px"><b>样式表:</b> {{ diffData.new_resource_meta.resources.stylesheet_count }}</span>
-              <span style="margin-right:12px"><b>图片:</b> {{ diffData.new_resource_meta.resources.image_count }}</span>
-              <span><b>链接:</b> {{ diffData.new_resource_meta.resources.link_count }}</span>
-            </template>
-            <template v-if="diffData.new_resource_meta.resources.total_requests != null">
-              <span style="margin-right:12px"><b>总请求:</b> {{ diffData.new_resource_meta.resources.total_requests }}</span>
-              <span><b>总大小:</b> {{ formatBytes(diffData.new_resource_meta.resources.total_size_bytes) }}</span>
-            </template>
+            <div class="meta-item"><span class="key">版本:</span><span class="val">{{ healthData.version }}</span></div>
+            <div class="meta-item"><span class="key">数据库:</span><span class="val">{{ healthData.db_ok?'正常':'异常' }}</span></div>
+            <div class="meta-item"><span class="key">调度器:</span><span class="val">{{ healthData.scheduler_running?'运行中':'停止' }}</span></div>
+            <div class="meta-item"><span class="key">活跃任务:</span><span class="val">{{ healthData.active_jobs }}</span></div>
+            <div class="meta-item"><span class="key">队列大小:</span><span class="val">{{ healthData.queue_size }}</span></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- History Modal -->
+    <div v-if="historyModal" class="modal-overlay" @click.self="historyModal=false">
+      <div class="modal">
+        <h2>变更历史 <button class="btn btn-sm" @click="historyModal=false">关闭</button></h2>
+        <div v-if="snapshots.length>1" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;font-size:13px;">
+          <label>对比:</label>
+          <select v-model="compareFrom" style="font-size:13px"><option v-for="s in snapshots" :value="s.id">{{ fmtTime(s.created_at) }}</option></select>
+          <span>vs</span>
+          <select v-model="compareTo" style="font-size:13px"><option v-for="s in snapshots" :value="s.id">{{ fmtTime(s.created_at) }}</option></select>
+          <button class="btn btn-sm btn-primary" @click="showCustomDiff">对比</button>
+        </div>
+        <ul class="snapshot-list">
+          <li v-for="s in snapshots" :key="s.id">
+            <span>{{ fmtTime(s.created_at) }} — hash: {{ s.content_hash.slice(0,12) }}...</span>
+            <button class="btn btn-sm btn-primary" @click="showDiff(s.id)">查看差异</button>
+          </li>
+          <li v-if="!snapshots.length" style="color:#999">暂无快照</li>
+        </ul>
+
+        <div v-if="diffData" style="margin-top:16px">
+          <div class="diff-toolbar">
+            <button class="btn btn-sm" :class="{active:diffMode==='unified'}" @click="diffMode='unified'">统一视图</button>
+            <button class="btn btn-sm" :class="{active:diffMode==='split'}" @click="diffMode='split'">并排视图</button>
+            <button class="btn btn-sm" :class="{active:diffMode==='inline'}" @click="diffMode='inline'">内联视图</button>
+            <div class="diff-stats" v-if="diffData.stats">
+              <span class="add">+{{ diffData.stats.additions }}</span>
+              <span class="del"> -{{ diffData.stats.deletions }}</span>
+              <span class="chg"> ~{{ diffData.stats.changes }}</span>
+            </div>
+          </div>
+
+          <!-- Unified Diff -->
+          <div v-if="diffMode==='unified'" class="diff-container">
+            <template v-for="(block, bi) in collapsedBlocks" :key="bi">
+              <div v-if="block.collapsed" class="diff-line context-collapsed" @click="block.collapsed=false">
+                ... 展开 {{ block.lines.length }} 行未变更内容 ...
+              </div>
+              <template v-else>
+                <div v-for="line in block.lines" :key="line.idx" class="diff-line" :class="line.cls">
+                  <span class="diff-line-no">{{ line.oldNo||'' }}</span>
+                  <span class="diff-line-no">{{ line.newNo||'' }}</span>
+                  <span class="diff-line-content" v-html="line.html"></span>
+                </div>
+              </template>
+            </template>
+          </div>
+
+          <!-- Side-by-Side Diff -->
+          <div v-if="diffMode==='split'" class="side-by-side">
+            <div class="side diff-container">
+              <div v-for="line in splitLeft" :key="line.idx" class="diff-line" :class="line.cls">
+                <span class="diff-line-no">{{ line.no||'' }}</span>
+                <span class="diff-line-content" v-html="line.html"></span>
+              </div>
+            </div>
+            <div class="side diff-container">
+              <div v-for="line in splitRight" :key="line.idx" class="diff-line" :class="line.cls">
+                <span class="diff-line-no">{{ line.no||'' }}</span>
+                <span class="diff-line-content" v-html="line.html"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inline Diff -->
+          <div v-if="diffMode==='inline'" class="diff-container">
+            <div v-for="line in inlineLines" :key="line.idx" class="diff-line" :class="line.cls">
+              <span class="diff-line-no">{{ line.oldNo||'' }}</span>
+              <span class="diff-line-no">{{ line.newNo||'' }}</span>
+              <span class="diff-line-content" v-html="line.html"></span>
+            </div>
+          </div>
+
+          <!-- Screenshots -->
+          <div v-if="diffData.old_screenshot||diffData.new_screenshot" style="margin-top:16px">
+            <h3>截图对比</h3>
+            <div class="screenshot-compare">
+              <div class="side"><h4>前一版本</h4><img v-if="diffData.old_screenshot" :src="diffData.old_screenshot"><div v-else style="color:#999;padding:40px">无截图</div></div>
+              <div class="side"><h4>当前版本</h4><img v-if="diffData.new_screenshot" :src="diffData.new_screenshot"><div v-else style="color:#999;padding:40px">无截图</div></div>
+            </div>
+          </div>
+
+          <!-- Resource Meta -->
+          <div v-if="diffData.new_resource_meta" class="meta-section">
+            <h4>资源元数据</h4>
+            <div class="meta-grid">
+              <div class="meta-item"><span class="key">URL:</span><span class="val">{{ diffData.new_resource_meta.url }}</span></div>
+              <div class="meta-item"><span class="key">状态码:</span><span class="val">{{ diffData.new_resource_meta.status_code }}</span></div>
+              <div class="meta-item"><span class="key">Content-Type:</span><span class="val">{{ diffData.new_resource_meta.content_type }}</span></div>
+              <div class="meta-item"><span class="key">渲染方式:</span><span class="val">{{ diffData.new_resource_meta.render_mode }}</span></div>
+              <div class="meta-item"><span class="key">耗时:</span><span class="val">{{ diffData.new_resource_meta.elapsed_ms }}ms</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules Modal -->
+    <div v-if="rulesModal" class="modal-overlay" @click.self="rulesModal=false">
+      <div class="modal" style="max-width:700px">
+        <h2>监控规则 <button class="btn btn-sm" @click="rulesModal=false">关闭</button></h2>
+        <p style="font-size:12px;color:#666;margin-bottom:12px">配置规则后，只有满足规则的变更才会触发通知。无规则时所有变更都通知。</p>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group"><label>规则类型</label>
+            <select v-model="ruleForm.rule_type">
+              <option value="keyword_include">关键词包含</option>
+              <option value="keyword_exclude">关键词排除</option>
+              <option value="regex">正则匹配</option>
+              <option value="xpath">XPath提取</option>
+            </select>
+          </div>
+          <div class="form-group"><label>逻辑组</label>
+            <select v-model="ruleForm.logic_group"><option value="AND">AND (全部满足)</option><option value="OR">OR (任一满足)</option></select>
+          </div>
+          <div class="form-group full"><label>配置 (JSON)</label>
+            <textarea v-model="ruleForm.config_raw" placeholder='{"keywords":["价格","库存"]}'></textarea>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-primary" @click="addRule">添加规则</button>
+        <div style="margin-top:12px">
+          <div v-for="r in currentRules" :key="r.id" class="rule-item">
+            <span class="channel-badge">{{ r.rule_type }}</span>
+            <span style="flex:1;font-size:12px">{{ JSON.stringify(r.config) }}</span>
+            <span class="channel-badge">{{ r.logic_group }}</span>
+            <button class="btn btn-sm btn-danger" @click="deleteRule(r.id)">删除</button>
+          </div>
+          <div v-if="!currentRules.length" style="color:#999;font-size:13px">暂无规则（所有变更都将触发通知）</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bindings Modal -->
+    <div v-if="bindingsModal" class="modal-overlay" @click.self="bindingsModal=false">
+      <div class="modal" style="max-width:600px">
+        <h2>通知绑定 <button class="btn btn-sm" @click="bindingsModal=false">关闭</button></h2>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <select v-model="bindChannelId" style="flex:1">
+            <option value="">选择通道...</option>
+            <option v-for="c in channels" :value="c.id">{{ c.name }} ({{ c.channel_type }})</option>
+          </select>
+          <button class="btn btn-sm btn-primary" @click="addBinding" :disabled="!bindChannelId">绑定</button>
+        </div>
+        <div v-for="b in currentBindings" :key="b.id" class="rule-item">
+          <span class="channel-badge">{{ getChannelName(b.channel_id) }}</span>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm btn-danger" @click="removeBinding(b.channel_id)">解绑</button>
+        </div>
+        <div v-if="!currentBindings.length" style="color:#999;font-size:13px">暂未绑定通知通道</div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-const { createApp, ref, computed, onMounted } = Vue;
+const {createApp,ref,computed,onMounted,reactive} = Vue;
 createApp({
-  setup() {
+  setup(){
+    const token = ref(localStorage.getItem('ct_token')||'');
+    const needLogin = ref(false);
+    const loginForm = reactive({username:'',password:''});
     const tab = ref('list');
     const tasks = ref([]);
     const selected = ref([]);
     const editId = ref(null);
     const form = ref(defaultForm());
+    const formErrors = reactive({name:'',url:'',interval:'',headers:'',cookies:''});
     const previewText = ref('');
     const previewing = ref(false);
     const historyModal = ref(false);
     const snapshots = ref([]);
     const diffData = ref(null);
+    const diffMode = ref('unified');
+    const compareFrom = ref(null);
+    const compareTo = ref(null);
+    const channels = ref([]);
+    const channelForm = reactive({name:'',channel_type:'webhook',config_raw:'{}',rate_limit_per_minute:30});
+    const events = ref([]);
+    const eventFilter = reactive({task_id:'',event_type:'',date_from:'',date_to:'',keyword:''});
+    const healthData = ref(null);
+    const toast = reactive({show:false,msg:'',type:''});
+    const rulesModal = ref(false);
+    const currentRules = ref([]);
+    const ruleForm = reactive({rule_type:'keyword_include',logic_group:'AND',config_raw:'{"keywords":[]}'});
+    const rulesTaskId = ref(null);
+    const bindingsModal = ref(false);
+    const currentBindings = ref([]);
+    const bindingsTaskId = ref(null);
+    const bindChannelId = ref('');
 
-    function defaultForm() {
-      return { name:'', url:'', interval_seconds:300, render_mode:'static', proxy:'', timeout_seconds:30, headers_raw:'{}', cookies_raw:'{}', include_selector:'', exclude_selector:'' };
-    }
-    function resetForm() { form.value = defaultForm(); editId.value = null; previewText.value = ''; }
+    function defaultForm(){return{name:'',url:'',interval_seconds:300,render_mode:'static',proxy:'',timeout_seconds:30,headers_raw:'{}',cookies_raw:'{}',include_selector:'',exclude_selector:''};}
+    function resetForm(){form.value=defaultForm();editId.value=null;previewText.value='';Object.keys(formErrors).forEach(k=>formErrors[k]='');}
 
-    async function loadTasks() {
-      const r = await fetch('/api/tasks'); tasks.value = await r.json();
-    }
+    function showToast(msg,type='success'){toast.msg=msg;toast.type=type;toast.show=true;setTimeout(()=>toast.show=false,3000);}
 
-    function fmtTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN'); }
-
-    function formatBytes(bytes) {
-      if (!bytes) return '0 B';
-      const units = ['B', 'KB', 'MB', 'GB'];
-      let i = 0;
-      while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
-      return bytes.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
-    }
-
-    async function saveTask() {
-      const payload = { ...form.value };
-      try { payload.headers = JSON.parse(payload.headers_raw); } catch { payload.headers = {}; }
-      try { payload.cookies = JSON.parse(payload.cookies_raw); } catch { payload.cookies = {}; }
-      delete payload.headers_raw; delete payload.cookies_raw;
-      const method = editId.value ? 'PUT' : 'POST';
-      const url = editId.value ? `/api/tasks/${editId.value}` : '/api/tasks';
-      await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      await loadTasks(); tab.value = 'list'; resetForm();
-    }
-
-    async function doPreview() {
-      previewing.value = true; previewText.value = '';
-      try {
-        let headers = {}, cookies = {};
-        try { headers = JSON.parse(form.value.headers_raw); } catch {}
-        try { cookies = JSON.parse(form.value.cookies_raw); } catch {}
-        const r = await fetch('/api/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: form.value.url, include_selector: form.value.include_selector, exclude_selector: form.value.exclude_selector, render_mode: form.value.render_mode, headers, cookies, proxy: form.value.proxy })});
-        if (r.ok) { const d = await r.json(); previewText.value = d.text; }
-        else { const e = await r.json(); previewText.value = '错误: ' + (e.detail || r.statusText); }
-      } finally { previewing.value = false; }
+    async function api(path,opts={}){
+      const headers=opts.headers||{};
+      if(token.value)headers['Authorization']='Bearer '+token.value;
+      if(opts.body&&typeof opts.body==='object'&&!(opts.body instanceof FormData)){headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
+      opts.headers=headers;
+      const r=await fetch('/api'+path,opts);
+      if(r.status===401){needLogin.value=true;throw new Error('未登录');}
+      if(r.status===409){showToast('该任务已被其他操作修改，请刷新后重试','error');throw new Error('conflict');}
+      return r;
     }
 
-    function editTask(t) {
-      editId.value = t.id;
-      form.value = { name: t.name, url: t.url, interval_seconds: t.interval_seconds, render_mode: t.render_mode, proxy: t.proxy||'', timeout_seconds: t.timeout_seconds, headers_raw: JSON.stringify(t.headers||{}), cookies_raw: JSON.stringify(t.cookies||{}), include_selector: t.include_selector||'', exclude_selector: t.exclude_selector||'' };
-      tab.value = 'create'; previewText.value = '';
+    async function doLogin(){
+      const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(loginForm)});
+      if(r.ok){const d=await r.json();token.value=d.token;localStorage.setItem('ct_token',d.token);needLogin.value=false;loadTasks();}
+      else showToast('登录失败','error');
     }
 
-    async function deleteTask(id) { if(!confirm('确认删除?')) return; await fetch(`/api/tasks/${id}`,{method:'DELETE'}); await loadTasks(); }
-    async function triggerTask(id) { await fetch(`/api/tasks/${id}/trigger`,{method:'POST'}); await loadTasks(); }
-    async function pauseTask(id) { await fetch(`/api/tasks/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'paused'})}); await loadTasks(); }
-    async function resumeTask(id) { await fetch(`/api/tasks/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'active'})}); await loadTasks(); }
-
-    async function batchPause() { await fetch('/api/tasks/batch/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(selected.value)}); selected.value=[]; await loadTasks(); }
-    async function batchResume() { await fetch('/api/tasks/batch/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(selected.value)}); selected.value=[]; await loadTasks(); }
-    async function batchDelete() { if(!confirm('确认批量删除?')) return; await fetch('/api/tasks/batch/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(selected.value)}); selected.value=[]; await loadTasks(); }
-    function toggleAll(e) { selected.value = e.target.checked ? tasks.value.map(t=>t.id) : []; }
-
-    async function showHistory(taskId) {
-      historyModal.value = true; diffData.value = null;
-      const r = await fetch(`/api/tasks/${taskId}/snapshots`); snapshots.value = await r.json();
+    async function checkAuth(){
+      const r=await fetch('/api/auth/status');
+      const d=await r.json();
+      if(d.auth_enabled&&!token.value)needLogin.value=true;
+      else{needLogin.value=false;loadTasks();}
     }
 
-    const diffLines = computed(() => {
-      if (!diffData.value) return [];
-      return diffData.value.unified_diff.split('\n').map(line => {
-        let cls = '';
-        if (line.startsWith('+')) cls = 'diff-add';
-        else if (line.startsWith('-')) cls = 'diff-del';
-        else if (line.startsWith('@@')) cls = 'diff-header';
-        return { text: line, cls };
-      });
+    async function loadTasks(){const r=await api('/tasks');if(r.ok)tasks.value=await r.json();}
+    function fmtTime(t){if(!t)return'-';return new Date(t).toLocaleString('zh-CN');}
+
+    function validateForm(){
+      let ok=true;Object.keys(formErrors).forEach(k=>formErrors[k]='');
+      if(!form.value.name.trim()){formErrors.name='任务名称不能为空';ok=false;}
+      if(!/^https?:\/\/\S+/.test(form.value.url)){formErrors.url='请输入有效的URL';ok=false;}
+      if(form.value.interval_seconds<10){formErrors.interval='间隔不能小于10秒';ok=false;}
+      try{JSON.parse(form.value.headers_raw);}catch{formErrors.headers='JSON格式不正确';ok=false;}
+      try{JSON.parse(form.value.cookies_raw);}catch{formErrors.cookies='JSON格式不正确';ok=false;}
+      return ok;
+    }
+
+    async function saveTask(){
+      if(!validateForm())return;
+      const payload={...form.value};
+      try{payload.headers=JSON.parse(payload.headers_raw);}catch{payload.headers={};}
+      try{payload.cookies=JSON.parse(payload.cookies_raw);}catch{payload.cookies={};}
+      delete payload.headers_raw;delete payload.cookies_raw;
+      const method=editId.value?'PUT':'POST';
+      const url=editId.value?`/tasks/${editId.value}`:'/tasks';
+      const r=await api(url,{method,body:payload});
+      if(r.ok){await loadTasks();tab.value='list';resetForm();showToast(editId.value?'任务已更新':'任务已创建');}
+    }
+
+    async function doPreview(){
+      previewing.value=true;previewText.value='';
+      try{
+        let headers={},cookies={};
+        try{headers=JSON.parse(form.value.headers_raw);}catch{}
+        try{cookies=JSON.parse(form.value.cookies_raw);}catch{}
+        const r=await api('/preview',{method:'POST',body:{url:form.value.url,include_selector:form.value.include_selector,exclude_selector:form.value.exclude_selector,render_mode:form.value.render_mode,headers,cookies,proxy:form.value.proxy}});
+        if(r.ok){const d=await r.json();previewText.value=d.text;}
+        else{const e=await r.json();previewText.value='错误: '+(e.detail||r.statusText);}
+      }finally{previewing.value=false;}
+    }
+
+    function editTask(t){editId.value=t.id;form.value={name:t.name,url:t.url,interval_seconds:t.interval_seconds,render_mode:t.render_mode,proxy:t.proxy||'',timeout_seconds:t.timeout_seconds,headers_raw:JSON.stringify(t.headers||{}),cookies_raw:JSON.stringify(t.cookies||{}),include_selector:t.include_selector||'',exclude_selector:t.exclude_selector||''};tab.value='create';}
+    async function deleteTask(id){if(!confirm('确认删除?'))return;await api(`/tasks/${id}`,{method:'DELETE'});await loadTasks();}
+    async function triggerTask(id){await api(`/tasks/${id}/trigger`,{method:'POST'});showToast('已触发');await loadTasks();}
+    async function pauseTask(id){await api(`/tasks/${id}`,{method:'PUT',body:{status:'paused'}});await loadTasks();}
+    async function resumeTask(id){await api(`/tasks/${id}`,{method:'PUT',body:{status:'active'}});await loadTasks();}
+    async function batchPause(){await api('/tasks/batch/pause',{method:'POST',body:selected.value});selected.value=[];await loadTasks();}
+    async function batchResume(){await api('/tasks/batch/resume',{method:'POST',body:selected.value});selected.value=[];await loadTasks();}
+    async function batchDelete(){if(!confirm('确认批量删除?'))return;await api('/tasks/batch/delete',{method:'POST',body:selected.value});selected.value=[];await loadTasks();}
+    function toggleAll(e){selected.value=e.target.checked?tasks.value.map(t=>t.id):[];}
+
+    async function showHistory(taskId){
+      historyModal.value=true;diffData.value=null;
+      const r=await api(`/tasks/${taskId}/snapshots`);
+      if(r.ok){snapshots.value=await r.json();if(snapshots.value.length>=2){compareFrom.value=snapshots.value[1].id;compareTo.value=snapshots.value[0].id;}}
+    }
+
+    async function showDiff(snapshotId){const r=await api(`/snapshots/${snapshotId}/diff`);if(r.ok)diffData.value=await r.json();}
+    async function showCustomDiff(){if(!compareFrom.value||!compareTo.value)return;const r=await api(`/snapshots/${compareTo.value}/diff?compare_to=${compareFrom.value}`);if(r.ok)diffData.value=await r.json();}
+
+    const collapsedBlocks=computed(()=>{
+      if(!diffData.value||!diffData.value.structured_diff)return[];
+      const lines=diffData.value.structured_diff;
+      const blocks=[];let currentBlock=null;
+      for(let i=0;i<lines.length;i++){
+        const l=lines[i];const isCtx=l.type==='context';
+        if(isCtx){
+          if(!currentBlock||!currentBlock.isContext){currentBlock={isContext:true,collapsed:false,lines:[]};blocks.push(currentBlock);}
+          currentBlock.lines.push({idx:i,oldNo:l.old_line_no,newNo:l.new_line_no,html:escHtml(l.old_text),cls:''});
+        }else{
+          if(!currentBlock||currentBlock.isContext){currentBlock={isContext:false,collapsed:false,lines:[]};blocks.push(currentBlock);}
+          if(l.type==='changed'){
+            currentBlock.lines.push({idx:i*2,oldNo:l.old_line_no,newNo:null,html:renderWordDiff(l.word_diff,'old'),cls:'changed-old'});
+            currentBlock.lines.push({idx:i*2+1,oldNo:null,newNo:l.new_line_no,html:renderWordDiff(l.word_diff,'new'),cls:'changed-new'});
+          }else if(l.type==='added'){
+            currentBlock.lines.push({idx:i,oldNo:null,newNo:l.new_line_no,html:escHtml(l.new_text),cls:'added'});
+          }else if(l.type==='removed'){
+            currentBlock.lines.push({idx:i,oldNo:l.old_line_no,newNo:null,html:escHtml(l.old_text),cls:'removed'});
+          }
+        }
+      }
+      blocks.forEach(b=>{if(b.isContext&&b.lines.length>6)b.collapsed=true;});
+      return blocks;
     });
 
-    async function showDiff(snapshotId) {
-      const r = await fetch(`/api/snapshots/${snapshotId}/diff`); diffData.value = await r.json();
+    const splitLeft=computed(()=>{
+      if(!diffData.value||!diffData.value.structured_diff)return[];
+      return diffData.value.structured_diff.map((l,i)=>{
+        if(l.type==='context')return{idx:i,no:l.old_line_no,html:escHtml(l.old_text),cls:''};
+        if(l.type==='removed')return{idx:i,no:l.old_line_no,html:escHtml(l.old_text),cls:'removed'};
+        if(l.type==='changed')return{idx:i,no:l.old_line_no,html:renderWordDiff(l.word_diff,'old'),cls:'changed-old'};
+        return{idx:i,no:'',html:'',cls:''};
+      });
+    });
+    const splitRight=computed(()=>{
+      if(!diffData.value||!diffData.value.structured_diff)return[];
+      return diffData.value.structured_diff.map((l,i)=>{
+        if(l.type==='context')return{idx:i,no:l.new_line_no,html:escHtml(l.new_text),cls:''};
+        if(l.type==='added')return{idx:i,no:l.new_line_no,html:escHtml(l.new_text),cls:'added'};
+        if(l.type==='changed')return{idx:i,no:l.new_line_no,html:renderWordDiff(l.word_diff,'new'),cls:'changed-new'};
+        return{idx:i,no:'',html:'',cls:''};
+      });
+    });
+    const inlineLines=computed(()=>{
+      if(!diffData.value||!diffData.value.structured_diff)return[];
+      const out=[];
+      diffData.value.structured_diff.forEach((l,i)=>{
+        if(l.type==='context')out.push({idx:i,oldNo:l.old_line_no,newNo:l.new_line_no,html:escHtml(l.old_text),cls:''});
+        else if(l.type==='removed')out.push({idx:i,oldNo:l.old_line_no,newNo:null,html:escHtml(l.old_text),cls:'removed'});
+        else if(l.type==='added')out.push({idx:i,oldNo:null,newNo:l.new_line_no,html:escHtml(l.new_text),cls:'added'});
+        else if(l.type==='changed'){
+          out.push({idx:i*2,oldNo:l.old_line_no,newNo:null,html:renderWordDiff(l.word_diff,'old'),cls:'changed-old'});
+          out.push({idx:i*2+1,oldNo:null,newNo:l.new_line_no,html:renderWordDiff(l.word_diff,'new'),cls:'changed-new'});
+        }
+      });
+      return out;
+    });
+
+    function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    function renderWordDiff(wd,side){
+      if(!wd||!wd.length)return '';
+      return wd.map(t=>{
+        const v=escHtml(t.value);
+        if(t.type==='equal')return v;
+        if(t.type==='delete'&&side==='old')return `<span class="word-delete">${v}</span>`;
+        if(t.type==='insert'&&side==='new')return `<span class="word-insert">${v}</span>`;
+        if(t.type==='delete'&&side==='new')return '';
+        if(t.type==='insert'&&side==='old')return '';
+        return v;
+      }).join('');
     }
 
-    onMounted(loadTasks);
-    return { tab, tasks, selected, editId, form, previewText, previewing, historyModal, snapshots, diffData, diffLines, defaultForm, resetForm, loadTasks, fmtTime, formatBytes, saveTask, doPreview, editTask, deleteTask, triggerTask, pauseTask, resumeTask, batchPause, batchResume, batchDelete, toggleAll, showHistory, showDiff };
+    // Channels
+    async function loadChannels(){const r=await api('/channels');if(r.ok)channels.value=await r.json();}
+    async function saveChannel(){
+      let config={};try{config=JSON.parse(channelForm.config_raw);}catch{showToast('配置JSON格式不正确','error');return;}
+      const r=await api('/channels',{method:'POST',body:{name:channelForm.name,channel_type:channelForm.channel_type,config,rate_limit_per_minute:channelForm.rate_limit_per_minute}});
+      if(r.ok){await loadChannels();channelForm.name='';channelForm.config_raw='{}';showToast('通道已创建');}
+    }
+    async function deleteChannel(id){if(!confirm('确认删除?'))return;await api(`/channels/${id}`,{method:'DELETE'});await loadChannels();}
+    async function testChannel(id){
+      try{const r=await api(`/channels/${id}/test`,{method:'POST'});if(r.ok)showToast('测试发送成功');else{const d=await r.json();showToast(d.detail||'发送失败','error');}}catch(e){showToast('发送失败','error');}
+    }
+    function getChannelName(id){const c=channels.value.find(x=>x.id===id);return c?`${c.name}(${c.channel_type})`:`#${id}`;}
+
+    // Events
+    async function loadEvents(){
+      let q='?limit=100';
+      if(eventFilter.task_id)q+=`&task_id=${eventFilter.task_id}`;
+      if(eventFilter.event_type)q+=`&event_type=${eventFilter.event_type}`;
+      if(eventFilter.date_from)q+=`&date_from=${eventFilter.date_from}`;
+      if(eventFilter.date_to)q+=`&date_to=${eventFilter.date_to}`;
+      if(eventFilter.keyword)q+=`&keyword=${encodeURIComponent(eventFilter.keyword)}`;
+      const r=await api('/events'+q);if(r.ok)events.value=await r.json();
+    }
+
+    // Rules
+    async function showRules(taskId){
+      rulesTaskId.value=taskId;rulesModal.value=true;
+      const r=await api(`/tasks/${taskId}/rules`);if(r.ok)currentRules.value=await r.json();
+    }
+    async function addRule(){
+      let config={};try{config=JSON.parse(ruleForm.config_raw);}catch{showToast('配置JSON格式不正确','error');return;}
+      const r=await api(`/tasks/${rulesTaskId.value}/rules`,{method:'POST',body:{rule_type:ruleForm.rule_type,logic_group:ruleForm.logic_group,config}});
+      if(r.ok){const r2=await api(`/tasks/${rulesTaskId.value}/rules`);if(r2.ok)currentRules.value=await r2.json();showToast('规则已添加');}
+    }
+    async function deleteRule(id){await api(`/rules/${id}`,{method:'DELETE'});const r=await api(`/tasks/${rulesTaskId.value}/rules`);if(r.ok)currentRules.value=await r.json();}
+
+    // Bindings
+    async function showBindings(taskId){
+      bindingsTaskId.value=taskId;bindingsModal.value=true;await loadChannels();
+      const r=await api(`/tasks/${taskId}/channels`);if(r.ok)currentBindings.value=await r.json();
+    }
+    async function addBinding(){
+      const r=await api(`/tasks/${bindingsTaskId.value}/channels`,{method:'POST',body:{channel_id:parseInt(bindChannelId.value)}});
+      if(r.ok){const r2=await api(`/tasks/${bindingsTaskId.value}/channels`);if(r2.ok)currentBindings.value=await r2.json();bindChannelId.value='';showToast('已绑定');}
+    }
+    async function removeBinding(chId){
+      await api(`/tasks/${bindingsTaskId.value}/channels/${chId}`,{method:'DELETE'});
+      const r=await api(`/tasks/${bindingsTaskId.value}/channels`);if(r.ok)currentBindings.value=await r.json();
+    }
+
+    // Admin
+    async function doExport(){const r=await api('/admin/export');if(r.ok){const d=await r.json();const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='changetrace_export.json';a.click();}}
+    async function doImport(e){
+      const file=e.target.files[0];if(!file)return;
+      const text=await file.text();let data;try{data=JSON.parse(text);}catch{showToast('JSON格式不正确','error');return;}
+      const r=await api('/admin/import',{method:'POST',body:data});
+      if(r.ok){const d=await r.json();showToast(`导入完成: ${d.imported.tasks}任务, ${d.imported.channels}通道`);await loadTasks();}
+      e.target.value='';
+    }
+    async function checkHealth(){const r=await api('/health');if(r.ok)healthData.value=await r.json();}
+
+    onMounted(checkAuth);
+    return{token,needLogin,loginForm,doLogin,tab,tasks,selected,editId,form,formErrors,previewText,previewing,historyModal,snapshots,diffData,diffMode,compareFrom,compareTo,channels,channelForm,events,eventFilter,healthData,toast,rulesModal,currentRules,ruleForm,rulesTaskId,bindingsModal,currentBindings,bindingsTaskId,bindChannelId,
+      defaultForm,resetForm,loadTasks,fmtTime,validateForm,saveTask,doPreview,editTask,deleteTask,triggerTask,pauseTask,resumeTask,batchPause,batchResume,batchDelete,toggleAll,showHistory,showDiff,showCustomDiff,collapsedBlocks,splitLeft,splitRight,inlineLines,
+      loadChannels,saveChannel,deleteChannel,testChannel,getChannelName,loadEvents,showRules,addRule,deleteRule,showBindings,addBinding,removeBinding,doExport,doImport,checkHealth};
   }
 }).mount('#app');
 </script>

@@ -2,7 +2,31 @@ services:
   changetrace:
     build: .
     ports:
-      - "8000:8000"
+      - "${CT_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
+    environment:
+      - CT_DATA_DIR=/app/data
+      - CT_AUTH_ENABLED=${CT_AUTH_ENABLED:-false}
+      - CT_AUTH_USERNAME=${CT_AUTH_USERNAME:-admin}
+      - CT_AUTH_PASSWORD=${CT_AUTH_PASSWORD:-admin}
+      - CT_AUTH_SECRET_KEY=${CT_AUTH_SECRET_KEY:-changetrace-secret}
+      - CT_SMTP_HOST=${CT_SMTP_HOST:-}
+      - CT_SMTP_PORT=${CT_SMTP_PORT:-587}
+      - CT_SMTP_USER=${CT_SMTP_USER:-}
+      - CT_SMTP_PASSWORD=${CT_SMTP_PASSWORD:-}
+      - CT_SMTP_FROM=${CT_SMTP_FROM:-}
+      - CT_TELEGRAM_BOT_TOKEN=${CT_TELEGRAM_BOT_TOKEN:-}
+      - CT_DINGTALK_WEBHOOK_URL=${CT_DINGTALK_WEBHOOK_URL:-}
+      - CT_DINGTALK_SECRET=${CT_DINGTALK_SECRET:-}
+      - CT_SLACK_WEBHOOK_URL=${CT_SLACK_WEBHOOK_URL:-}
+      - CT_LOG_LEVEL=${CT_LOG_LEVEL:-INFO}
+      - CT_MAX_CONCURRENT_TASKS=${CT_MAX_CONCURRENT_TASKS:-5}
+      - CT_NOTIFICATION_RETRY_MAX=${CT_NOTIFICATION_RETRY_MAX:-5}
+      - CT_NOTIFICATION_RATE_LIMIT_PER_MINUTE=${CT_NOTIFICATION_RATE_LIMIT_PER_MINUTE:-30}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
